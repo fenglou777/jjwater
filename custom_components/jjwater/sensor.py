@@ -30,7 +30,7 @@ class JJWaterBaseSensor(CoordinatorEntity, SensorEntity):
     @property
     def device_info(self) -> dict:
         name = f"晋江水务 {self._account}" + (f" ({self.account_data.get('user_name')})" if self.account_data.get('user_name') else "")
-        return {"identifiers": {(DOMAIN, self._account)}, "name": name, "manufacturer": "晋江市水务集团", "model": f"户号: {self._account}"}
+        return {"identifiers": {(DOMAIN, self._account)}, "name": name, "manufacturer": "晋江自来水股份有限公司", "model": f"户号: {self._account}"}
 
 class JJWaterReadingSensor(JJWaterBaseSensor):
     _attr_name = "水表总抄表数"
