@@ -6,7 +6,7 @@
         "description": "请输入小程序抓包获得的 Authorization Token 以及需要监控的水费户号（两个及以上户号请用英文逗号分隔）。",
         "data": {
           "token": "Authorization Token (Bearer ...)",
-          "accounts": "水费户号 (例如: 026483,026484)"
+          "accounts": "水费户号 (例如: 0xxxxx,0xxxxx)"
         }
       }
     },
