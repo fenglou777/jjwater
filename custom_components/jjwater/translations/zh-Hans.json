@@ -1,0 +1,30 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "添加 晋江水务 账号",
+        "description": "请输入小程序抓包获得的 Authorization Token 以及需要监控的水费户号（两个及以上户号请用英文逗号分隔）。",
+        "data": {
+          "token": "Authorization Token (Bearer ...)",
+          "accounts": "水费户号 (例如: 026483,026484)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "无法连接到晋江水务服务器",
+      "invalid_auth": "Token 无效或已过期",
+      "unknown": "未知错误"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "更新 晋江水务 配置",
+        "data": {
+          "token": "Authorization Token (Bearer ...)",
+          "accounts": "水费户号 (多个用英文逗号分隔)"
+        }
+      }
+    }
+  }
+}
