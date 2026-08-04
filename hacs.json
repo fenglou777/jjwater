@@ -1,0 +1,6 @@
+{
+  "name": "晋江水务 (Jinjiang Water)",
+  "render_readme": true,
+  "file_name": "jjwater",
+  "iot_class": "Cloud Polling"
+}
