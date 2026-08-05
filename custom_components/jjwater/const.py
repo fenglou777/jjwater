@@ -1,9 +1,16 @@
-"""晋江水务 常量定义"""
-DOMAIN = "jjwater"
-CONF_TOKEN = "token"
-CONF_ACCOUNTS = "accounts"
+"""Constants for the Jinjiang Water integration."""
+from typing import Final
 
-API_URL_DAILY = "https://wwt.jinjiangwater.com/jjapis/ysBase/findEveryDayYsl"
-API_URL_YEAR = "https://wwt.jinjiangwater.com/jjapis/ysBase/findYearDz"
+DOMAIN: Final = "jjwater"
 
+# Config keys
+CONF_USER_KH: Final = "user_kh"
+CONF_TOKEN: Final = "token"
+
+# Defaults
+DEFAULT_NAME: Final = "晋江水务"
+DEFAULT_SCAN_INTERVAL_HOURS: Final = 2
+
+# API Base URL
+BASE_URL: Final = "https://wwt.jinjiangwater.com/jjapis"
 DEFAULT_UPDATE_INTERVAL = 18000  # 默认刷新频率：5小时
