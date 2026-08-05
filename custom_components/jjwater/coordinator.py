@@ -31,12 +31,18 @@ class JJWaterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data from API."""
         try:
+            # 1. 获取基础概览信息（必须成功）
             overview = await self.api.get_overview(self.user_kh)
+
+            # 2. 获取每日用量与年度账单（带内部容错，不干扰核心数据）
             daily_data = await self.api.get_daily_usage(self.user_kh)
             year_bills = await self.api.get_year_bill(self.user_kh)
 
+            # 提取最新一日的记录
             daily_list = daily_data.get("everyDayYsl", [])
             latest_day = daily_list[-1] if daily_list else {}
+
+            # 提取最新一期的账单记录
             latest_bill = year_bills[-1] if year_bills else {}
 
             return {
@@ -46,9 +52,10 @@ class JJWaterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "latest_bill": latest_bill,
                 "zsl": daily_data.get("zsl", 0.0),
             }
+
         except JJWaterAuthError as err:
-            raise UpdateFailed(f"身份验证失效，请重新配置 Token: {err}") from err
+            raise UpdateFailed(f"认证凭据失效: {err}") from err
         except JJWaterAPIError as err:
-            raise UpdateFailed(f"请求水务接口错误: {err}") from err
+            raise UpdateFailed(f"水费接口查询失败: {err}") from err
         except Exception as err:
-            raise UpdateFailed(f"未预期的数据刷新失败: {err}") from err
+            raise UpdateFailed(f"未知刷新异常: {err}") from err
