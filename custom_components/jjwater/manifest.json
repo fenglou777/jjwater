@@ -1,7 +1,7 @@
 {
   "domain": "jjwater",
   "name": "晋江水务 (Jinjiang Water)",
-  "codeowners": ["@your_github_id"],
+  "codeowners": ["@fenglou777"],
   "config_flow": true,
   "documentation": "https://github.com/your_github_id/jjwater",
   "iot_class": "cloud_polling",
