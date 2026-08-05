@@ -1,4 +1,4 @@
-"""API client for Jinjiang Water integration."""
+"""API Client for Jinjiang Water."""
 from __future__ import annotations
 
 import logging
@@ -7,90 +7,93 @@ from typing import Any
 
 import aiohttp
 
-from .const import BASE_URL
-
 _LOGGER = logging.getLogger(__name__)
 
-
-class JJWaterAuthError(Exception):
-    """Exception raised when authentication fails."""
+BASE_URL = "https://wwt.jinjiangwater.com/jjapis"
 
 
 class JJWaterAPIError(Exception):
-    """Exception raised when API request fails."""
+    """General API Error."""
+
+
+class JJWaterAuthError(JJWaterAPIError):
+    """Authentication Error."""
 
 
 class JJWaterAPI:
-    """Jinjiang Water API Wrapper."""
+    """Client for Jinjiang Water API."""
 
-    def __init__(self, session: aiohttp.ClientSession, token: str) -> None:
-        """Initialize the API client."""
+    def __init__(self, token: str, session: aiohttp.ClientSession) -> None:
+        """Initialize API."""
+        self._token = token.replace("Bearer ", "").strip()
         self._session = session
-        self._token = token if token.startswith("Bearer ") else f"Bearer {token}"
 
     @property
     def headers(self) -> dict[str, str]:
         """Get standard request headers."""
         return {
-            "Authorization": self._token,
+            "Authorization": f"Bearer {self._token}",
             "Content-Type": "application/x-www-form-urlencoded",
-            "User-Agent": (
-                "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) "
-                "AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148"
-            ),
+            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) MicroMessenger/8.0.70",
             "Origin": "https://wwt.jinjiangwater.com",
             "Referer": "https://wwt.jinjiangwater.com/mine/bill",
         }
 
-    async def _async_post(self, endpoint: str, data: dict[str, Any]) -> Any:
-        """Send a POST request to the API."""
-        url = f"{BASE_URL}/{endpoint}"
+    async def _post(self, path: str, data: dict[str, Any]) -> dict[str, Any]:
+        """Send POST request with form data."""
+        url = f"{BASE_URL}/{path}"
         try:
             async with self._session.post(
                 url, headers=self.headers, data=data, timeout=15
-            ) as response:
-                if response.status in (401, 403):
-                    raise JJWaterAuthError("Token 过期或验证失败")
-                if response.status != 200:
-                    raise JJWaterAPIError(f"服务器返回异常状态码: {response.status}")
+            ) as resp:
+                if resp.status in (401, 403):
+                    raise JJWaterAuthError("Token 已失效，请重新获取并配置")
 
-                res_json = await response.json()
-                code = res_json.get("code")
-                if code == 200:
-                    return res_json.get("data")
-                
-                msg = res_json.get("msg", "未知错误")
-                _LOGGER.error("API 响应错误 [%s]: %s", endpoint, msg)
-                raise JJWaterAPIError(msg)
-
+                res_json = await resp.json()
+                return res_json
         except aiohttp.ClientError as err:
-            raise JJWaterAPIError(f"网络连接异常: {err}") from err
+            raise JJWaterAPIError(f"网络连接失败: {err}") from err
 
     async def get_overview(self, user_kh: str) -> dict[str, Any]:
-        """获取用户概览信息 (findKhSl)."""
-        res = await self._async_post("ysBase/findKhSl", {"USERB_KH": user_kh})
-        return res if isinstance(res, dict) else {}
+        """获取水表基础概览信息 (findKhSl)."""
+        res = await self._post("ysBase/findKhSl", {"USERB_KH": user_kh})
+        if res.get("code") == 200 and "data" in res:
+            return res["data"]
+        # 如果获取概览失败，说明卡号或账号有误
+        msg = res.get("msg") or res.get("message") or "请求概览失败"
+        raise JJWaterAPIError(msg)
 
     async def get_daily_usage(
         self, user_kh: str, year_month: str | None = None
     ) -> dict[str, Any]:
-        """获取每日用水明细 (findEveryDayYsl)."""
+        """获取每日用量明细 (findEveryDayYsl)."""
         if not year_month:
             year_month = datetime.now().strftime("%Y%m")
-        res = await self._async_post(
-            "ysBase/findEveryDayYsl",
-            {"USERB_KH": user_kh, "YEAR_MONTH": year_month},
+
+        payload = {"USERB_KH": user_kh, "YEAR_MONTH": year_month}
+        res = await self._post("ysBase/findEveryDayYsl", payload)
+
+        # 容错处理：如果返回 "未绑定用户" 或其他错误，不抛出异常，返回空数据
+        if res.get("code") == 200 and isinstance(res.get("data"), dict):
+            return res["data"]
+
+        _LOGGER.debug(
+            "户号 %s 获取 %s 每日用量提示: %s", user_kh, year_month, res.get("msg")
         )
-        return res if isinstance(res, dict) else {}
+        return {"zsl": 0.0, "everyDayYsl": []}
 
     async def get_year_bill(
         self, user_kh: str, year: str | None = None
     ) -> list[dict[str, Any]]:
-        """获取年度账单列表 (findYearDz)."""
+        """获取年度账单明细 (findYearDz)."""
         if not year:
             year = datetime.now().strftime("%Y")
-        res = await self._async_post(
-            "ysBase/findYearDz",
-            {"USERB_KH": user_kh, "DEBTL_YEAR": year},
-        )
-        return res if isinstance(res, list) else []
+
+        payload = {"USERB_KH": user_kh, "DEBTL_YEAR": year}
+        res = await self._post("ysBase/findYearDz", payload)
+
+        if res.get("code") == 200 and isinstance(res.get("data"), list):
+            return res["data"]
+
+        _LOGGER.debug("户号 %s 获取 %s 年度账单提示: %s", user_kh, year, res.get("msg"))
+        return []
