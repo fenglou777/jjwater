@@ -7,7 +7,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CURRENCY_YUAN, UnitOfVolume
+from homeassistant.const import UnitOfVolume
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -56,7 +56,7 @@ class JJWaterBaseSensor(CoordinatorEntity[JJWaterCoordinator], SensorEntity):
 
 
 class JJWaterMeterReadingSensor(JJWaterBaseSensor):
-    """水表读数传感器（原生支持 HA 能源仪表盘水用量卡片）."""
+    """水表读数传感器."""
 
     _attr_name = "水表读数"
     _attr_native_unit_of_measurement = UnitOfVolume.CUBIC_METERS
@@ -68,7 +68,6 @@ class JJWaterMeterReadingSensor(JJWaterBaseSensor):
 
     @property
     def native_value(self) -> float | None:
-        """提取最新抄表表读数 bqds."""
         latest_day = self.coordinator.data.get("latest_day", {})
         ds = latest_day.get("bqds")
         return float(ds) if ds is not None else None
@@ -87,7 +86,6 @@ class JJWaterTodayUsageSensor(JJWaterBaseSensor):
 
     @property
     def native_value(self) -> float | None:
-        """提取最新一天的实际用水量 sl."""
         latest_day = self.coordinator.data.get("latest_day", {})
         sl = latest_day.get("sl")
         return float(sl) if sl is not None else None
@@ -106,7 +104,6 @@ class JJWaterMonthUsageSensor(JJWaterBaseSensor):
 
     @property
     def native_value(self) -> float | None:
-        """优先提取 zsl，没有则获取概览的 BQSL."""
         zsl = self.coordinator.data.get("zsl")
         if zsl is not None and zsl > 0:
             return float(zsl)
@@ -119,7 +116,7 @@ class JJWaterMonthBillSensor(JJWaterBaseSensor):
     """当月水费账单传感器."""
 
     _attr_name = "当月水费账单"
-    _attr_native_unit_of_measurement = CURRENCY_YUAN
+    _attr_native_unit_of_measurement = "¥"  # 直接写字符串，兼容所有 HA 版本
     _attr_device_class = SensorDeviceClass.MONETARY
 
     def __init__(self, coordinator: JJWaterCoordinator) -> None:
@@ -127,7 +124,6 @@ class JJWaterMonthBillSensor(JJWaterBaseSensor):
 
     @property
     def native_value(self) -> float | None:
-        """提取当月账单金额."""
         overview = self.coordinator.data.get("overview", {})
         bqje = overview.get("BQJE")
         if bqje is not None:
@@ -149,7 +145,6 @@ class JJWaterYearUsageSensor(JJWaterBaseSensor):
 
     @property
     def native_value(self) -> float | None:
-        """提取年度累计用水量 NDSL."""
         overview = self.coordinator.data.get("overview", {})
         ndsl = overview.get("NDSL")
         return float(ndsl) if ndsl is not None else None
@@ -166,7 +161,6 @@ class JJWaterPaymentStatusSensor(JJWaterBaseSensor):
 
     @property
     def native_value(self) -> str | None:
-        """提取缴费状态 PAY_TAG."""
         overview = self.coordinator.data.get("overview", {})
         tag = overview.get("PAY_TAG")
         if tag:
