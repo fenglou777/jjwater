@@ -1,74 +1,166 @@
-"""晋江水务 传感器定义"""
+"""Sensor platform for Jinjiang Water."""
 from __future__ import annotations
-from homeassistant.components.sensor import SensorEntity, SensorStateClass, SensorDeviceClass
+
+from homeassistant.components.sensor import (
+    SensorEntity,
+    SensorDeviceClass,
+    SensorStateClass,
+)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from .const import DOMAIN
-from .coordinator import JJWaterCoordinator
+from homeassistant.const import UnitOfVolume, CURRENCY_YUAN
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
-    coordinator: JJWaterCoordinator = hass.data[DOMAIN][entry.entry_id]
-    entities = []
-    for acc in coordinator.accounts:
-        entities.extend([
-            JJWaterReadingSensor(coordinator, acc), JJWaterMonthUsageSensor(coordinator, acc),
-            JJWaterBillStatusSensor(coordinator, acc), JJWaterLastBillSensor(coordinator, acc)
-        ])
-    async_add_entities(entities)
+from .const import DOMAIN
+from .coordinator import JJWaterDataUpdateCoordinator
+
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    """Set up Jinjiang Water sensors from a config entry."""
+    coordinator: JJWaterDataUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]
+
+    sensors = [
+        JJWaterMeterReadingSensor(coordinator),
+        JJWaterTodayUsageSensor(coordinator),
+        JJWaterMonthUsageSensor(coordinator),
+        JJWaterMonthBillSensor(coordinator),
+        JJWaterYearUsageSensor(coordinator),
+        JJWaterPaymentStatusSensor(coordinator),
+    ]
+
+    async_add_entities(sensors)
+
 
 class JJWaterBaseSensor(CoordinatorEntity, SensorEntity):
-    def __init__(self, coordinator: JJWaterCoordinator, account: str) -> None:
+    """Base sensor for Jinjiang Water."""
+
+    def __init__(self, coordinator: JJWaterDataUpdateCoordinator, sensor_type: str) -> None:
+        """Initialize the sensor."""
         super().__init__(coordinator)
-        self._account = account
+        self.user_kh = coordinator.user_kh
+        self._sensor_type = sensor_type
+        self._attr_unique_id = f"jjwater_{self.user_kh}_{sensor_type}"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, self.user_kh)},
+            "name": f"晋江水务 ({self.user_kh})",
+            "manufacturer": "Jinjiang Water",
+            "model": "Smart Water Meter",
+        }
+
+
+class JJWaterMeterReadingSensor(JJWaterBaseSensor):
+    """水表总读数传感器 (专为 Home Assistant 能源仪表盘设计)."""
+
+    def __init__(self, coordinator: JJWaterDataUpdateCoordinator) -> None:
+        super().__init__(coordinator, "meter_reading")
+        self._attr_name = "水表读数"
+        self._attr_native_unit_of_measurement = UnitOfVolume.CUBIC_METERS
+        self._attr_device_class = SensorDeviceClass.WATER
+        self._attr_state_class = SensorStateClass.TOTAL_INCREASING
 
     @property
-    def account_data(self) -> dict:
-        return self.coordinator.data.get(self._account, {}) if self.coordinator.data else {}
+    def native_value(self) -> float | None:
+        """获取最新抄表表读数 bqds."""
+        latest_day = self.coordinator.data.get("latest_day", {})
+        ds = latest_day.get("bqds")
+        return float(ds) if ds is not None else None
+
+
+class JJWaterTodayUsageSensor(JJWaterBaseSensor):
+    """今日实际用水量传感器."""
+
+    def __init__(self, coordinator: JJWaterDataUpdateCoordinator) -> None:
+        super().__init__(coordinator, "today_usage")
+        self._attr_name = "今日用水量"
+        self._attr_native_unit_of_measurement = UnitOfVolume.CUBIC_METERS
+        self._attr_device_class = SensorDeviceClass.WATER
+        self._attr_state_class = SensorStateClass.TOTAL
 
     @property
-    def device_info(self) -> dict:
-        name = f"晋江水务 {self._account}" + (f" ({self.account_data.get('user_name')})" if self.account_data.get('user_name') else "")
-        return {"identifiers": {(DOMAIN, self._account)}, "name": name, "manufacturer": "晋江自来水股份有限公司", "model": f"户号: {self._account}"}
+    def native_value(self) -> float | None:
+        """获取最新一天的实际用水量 sl."""
+        latest_day = self.coordinator.data.get("latest_day", {})
+        sl = latest_day.get("sl")
+        return float(sl) if sl is not None else None
 
-class JJWaterReadingSensor(JJWaterBaseSensor):
-    _attr_name = "水表总抄表数"
-    _attr_device_class = SensorDeviceClass.WATER
-    _attr_state_class = SensorStateClass.TOTAL_INCREASING
-    _attr_native_unit_of_measurement = "m³"
-    _attr_icon = "mdi:water-pump"
-    @property
-    def unique_id(self) -> str: return f"{DOMAIN}_{self._account}_total_reading"
-    @property
-    def native_value(self) -> float: return self.account_data.get("total_reading", 0.0)
-    @property
-    def extra_state_attributes(self) -> dict: return {"抄表日期": self.account_data.get("latest_cb_date", ""), "户名": self.account_data.get("user_name", "")}
 
 class JJWaterMonthUsageSensor(JJWaterBaseSensor):
-    _attr_name = "本月用水量"
-    _attr_device_class = SensorDeviceClass.WATER
-    _attr_native_unit_of_measurement = "m³"
-    _attr_icon = "mdi:water"
-    @property
-    def unique_id(self) -> str: return f"{DOMAIN}_{self._account}_month_usage"
-    @property
-    def native_value(self) -> float: return self.account_data.get("current_month_usage", 0.0)
+    """当月实际用水量传感器."""
 
-class JJWaterBillStatusSensor(JJWaterBaseSensor):
-    _attr_name = "账单状态"
-    @property
-    def unique_id(self) -> str: return f"{DOMAIN}_{self._account}_bill_status"
-    @property
-    def native_value(self) -> str: return self.account_data.get("current_bill_status", "正常")
-    @property
-    def icon(self) -> str: return "mdi:water-alert" if self.native_value == "未缴" else "mdi:water-check"
+    def __init__(self, coordinator: JJWaterDataUpdateCoordinator) -> None:
+        super().__init__(coordinator, "month_usage")
+        self._attr_name = "当月用水量"
+        self._attr_native_unit_of_measurement = UnitOfVolume.CUBIC_METERS
+        self._attr_device_class = SensorDeviceClass.WATER
+        self._attr_state_class = SensorStateClass.TOTAL
 
-class JJWaterLastBillSensor(JJWaterBaseSensor):
-    _attr_name = "账单金额"
-    _attr_native_unit_of_measurement = "元"
-    _attr_icon = "mdi:currency-cnf"
     @property
-    def unique_id(self) -> str: return f"{DOMAIN}_{self._account}_last_bill"
+    def native_value(self) -> float | None:
+        """优先取每日接口的 zsl，无则取概览中的 BQSL."""
+        zsl = self.coordinator.data.get("zsl")
+        if zsl is not None and zsl > 0:
+            return float(zsl)
+        overview = self.coordinator.data.get("overview", {})
+        bqsl = overview.get("BQSL")
+        return float(bqsl) if bqsl is not None else None
+
+
+class JJWaterMonthBillSensor(JJWaterBaseSensor):
+    """当月水费/应缴金额传感器."""
+
+    def __init__(self, coordinator: JJWaterDataUpdateCoordinator) -> None:
+        super().__init__(coordinator, "month_bill")
+        self._attr_name = "当月水费账单"
+        self._attr_native_unit_of_measurement = CURRENCY_YUAN
+        self._attr_device_class = SensorDeviceClass.MONETARY
+
     @property
-    def native_value(self) -> float: return self.account_data.get("last_bill_amount", 0.0)
+    def native_value(self) -> float | None:
+        """获取最新账单金额 DEBTL_STOTAL 或 BQJE."""
+        overview = self.coordinator.data.get("overview", {})
+        bqje = overview.get("BQJE")
+        if bqje is not None:
+            return float(bqje)
+        latest_bill = self.coordinator.data.get("latest_bill", {})
+        total = latest_bill.get("DEBTL_STOTAL")
+        return float(total) if total is not None else None
+
+
+class JJWaterYearUsageSensor(JJWaterBaseSensor):
+    """年度累计用水量传感器."""
+
+    def __init__(self, coordinator: JJWaterDataUpdateCoordinator) -> None:
+        super().__init__(coordinator, "year_usage")
+        self._attr_name = "年度累计用水量"
+        self._attr_native_unit_of_measurement = UnitOfVolume.CUBIC_METERS
+        self._attr_device_class = SensorDeviceClass.WATER
+
+    @property
+    def native_value(self) -> float | None:
+        """获取概览中的 NDSL."""
+        overview = self.coordinator.data.get("overview", {})
+        ndsl = overview.get("NDSL")
+        return float(ndsl) if ndsl is not None else None
+
+
+class JJWaterPaymentStatusSensor(JJWaterBaseSensor):
+    """缴费状态传感器."""
+
+    def __init__(self, coordinator: JJWaterDataUpdateCoordinator) -> None:
+        super().__init__(coordinator, "payment_status")
+        self._attr_name = "缴费状态"
+        self._attr_icon = "mdi:cash-check"
+
+    @property
+    def native_value(self) -> str | None:
+        """获取概览中的 PAY_TAG 或账单中的 JFZT."""
+        overview = self.coordinator.data.get("overview", {})
+        tag = overview.get("PAY_TAG")
+        if tag:
+            return str(tag)
+        latest_bill = self.coordinator.data.get("latest_bill", {})
+        return latest_bill.get("JFZT")
