@@ -1,12 +1,11 @@
 {
   "domain": "jjwater",
-  "name": "晋江水务",
-  "codeowners": ["@yourname"],
+  "name": "晋江水务 (Jinjiang Water)",
+  "codeowners": ["@your_github_id"],
   "config_flow": true,
-  "documentation": "https://github.com/yourname/jjwater",
-  "integration_type": "service",
+  "documentation": "https://github.com/your_github_id/jjwater",
   "iot_class": "cloud_polling",
-  "issue_tracker": "https://github.com/yourname/jjwater/issues",
+  "issue_tracker": "https://github.com/your_github_id/jjwater/issues",
   "requirements": [],
-  "version": "1.0.0"
+  "version": "1.0.3"
 }
