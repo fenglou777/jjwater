@@ -4,10 +4,9 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import volatile as vol
-import homeassistant.helpers.config_validation as cv
+import voluptuous as vol
+
 from homeassistant import config_entries
-from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import JJWaterAPI, JJWaterAPIError, JJWaterAuthError
@@ -23,7 +22,7 @@ class JJWaterConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> config_entries.FlowResult:
         """Handle the initial step."""
         errors: dict[str, str] = {}
 
@@ -39,8 +38,8 @@ class JJWaterConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             try:
                 overview = await api.get_overview(user_kh)
-                # 拿户名作为设备展示名称
-                customer_name = overview.get("USERB_NAME", user_kh)
+                # 获取户名作为显示标题（如未获取到则回退显示户号）
+                customer_name = overview.get("USERB_NAME", user_kh) if isinstance(overview, dict) else user_kh
             except JJWaterAuthError:
                 errors["base"] = "invalid_auth"
             except JJWaterAPIError:
@@ -57,7 +56,7 @@ class JJWaterConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     },
                 )
 
-        import collection_schema as schema  # Fallback helper
+        # 描述配置表单
         data_schema = vol.Schema(
             {
                 vol.Required(CONF_USER_KH): str,
@@ -66,5 +65,7 @@ class JJWaterConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
         return self.async_show_form(
-            step_id="user", data_schema=data_schema, errors=errors
+            step_id="user",
+            data_schema=data_schema,
+            errors=errors,
         )
