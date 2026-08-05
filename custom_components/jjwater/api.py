@@ -23,10 +23,10 @@ class JJWaterAuthError(JJWaterAPIError):
 class JJWaterAPI:
     """Client for Jinjiang Water API."""
 
-    def __init__(self, token: str, session: aiohttp.ClientSession) -> None:
+    def __init__(self, session: aiohttp.ClientSession, token: str) -> None:
         """Initialize API."""
-        self._token = token.replace("Bearer ", "").strip()
         self._session = session
+        self._token = str(token).replace("Bearer ", "").strip()
 
     @property
     def headers(self) -> dict[str, str]:
@@ -59,7 +59,6 @@ class JJWaterAPI:
         res = await self._post("ysBase/findKhSl", {"USERB_KH": user_kh})
         if res.get("code") == 200 and "data" in res:
             return res["data"]
-        # 如果获取概览失败，说明卡号或账号有误
         msg = res.get("msg") or res.get("message") or "请求概览失败"
         raise JJWaterAPIError(msg)
 
@@ -73,7 +72,6 @@ class JJWaterAPI:
         payload = {"USERB_KH": user_kh, "YEAR_MONTH": year_month}
         res = await self._post("ysBase/findEveryDayYsl", payload)
 
-        # 容错处理：如果返回 "未绑定用户" 或其他错误，不抛出异常，返回空数据
         if res.get("code") == 200 and isinstance(res.get("data"), dict):
             return res["data"]
 
