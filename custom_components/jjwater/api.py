@@ -1,59 +1,71 @@
-"""晋江水务 API 通信模块"""
-from __future__ import annotations
+"""API client for Jinjiang Water integration."""
 import logging
 from datetime import datetime
 import aiohttp
-import async_timeout
-from .const import API_URL_DAILY, API_URL_YEAR
 
 _LOGGER = logging.getLogger(__name__)
 
-class JJWaterAPI:
-    def __init__(self, session: aiohttp.ClientSession, token: str) -> None:
-        self._session = session
-        token_str = token.strip()
-        self._token = token_str if token_str.startswith("Bearer ") else f"Bearer {token_str}"
+BASE_URL = "https://wwt.jinjiangwater.com/jjapis"
 
-    async def fetch_account_data(self, account: str) -> dict:
-        headers = {
-            "Host": "wwt.jinjiangwater.com",
-            "Content-Type": "application/x-www-form-urlencoded",
+class JJWaterAPI:
+    """Jinjiang Water API Wrapper."""
+
+    def __init__(self, session: aiohttp.ClientSession, token: str) -> None:
+        """Initialize the API."""
+        self._session = session
+        # 保证 token 前缀正确
+        if not token.startswith("Bearer "):
+            self._token = f"Bearer {token}"
+        else:
+            self._token = token
+
+    @property
+    def headers(self) -> dict:
+        """Get standard request headers."""
+        return {
             "Authorization": self._token,
-            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X)",
+            "Content-Type": "application/x-www-form-urlencoded",
+            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15",
+            "Origin": "https://wwt.jinjiangwater.com",
             "Referer": "https://wwt.jinjiangwater.com/mine/bill",
         }
-        now = datetime.now()
-        current_ym, current_year, current_month = now.strftime("%Y%m"), str(now.year), now.month
-        
-        result = {
-            "account": account, "user_name": "", "total_reading": 0.0,
-            "latest_cb_date": "", "current_month_usage": 0.0,
-            "current_bill_status": "正常", "current_bill_amount": 0.0, "last_bill_amount": 0.0,
-        }
 
+    async def async_post(self, endpoint: str, data: dict) -> dict:
+        """Send POST request to API."""
+        url = f"{BASE_URL}/{endpoint}"
         try:
-            async with async_timeout.timeout(12):
-                payload_daily = f"USERB_KH={account}&YEAR_MONTH={current_ym}"
-                async with self._session.post(API_URL_DAILY, data=payload_daily, headers=headers) as resp:
-                    res_d = await resp.json()
-                    if res_d.get("code") == 200 and "data" in res_d:
-                        result["current_month_usage"] = float(res_d["data"].get("zsl", 0.0))
-                        if days := res_d["data"].get("everyDayYsl", []):
-                            result["total_reading"] = float(days[-1].get("bqds", 0.0))
-                            result["latest_cb_date"] = days[-1].get("cbsj", "")
-                            result["user_name"] = days[-1].get("hm", "")
-
-                payload_year = f"USERB_KH={account}&DEBTL_YEAR={current_year}"
-                async with self._session.post(API_URL_YEAR, data=payload_year, headers=headers) as resp:
-                    res_y = await resp.json()
-                    if res_y.get("code") == 200 and "data" in res_y:
-                        for bill in res_y["data"]:
-                            mon = bill.get("DEBTL_MON")
-                            if mon == current_month:
-                                result["current_bill_status"] = bill.get("JFZT", "未知")
-                                result["current_bill_amount"] = float(bill.get("DEBTL_STOTAL", 0.0))
-                            elif mon == current_month - 1 or (current_month == 1 and mon == 12):
-                                result["last_bill_amount"] = float(bill.get("DEBTL_STOTAL", 0.0))
+            async with self._session.post(url, headers=self.headers, data=data, timeout=15) as response:
+                if response.status != 200:
+                    _LOGGER.error("API call failed with status %s", response.status)
+                    return {}
+                res_json = await response.json()
+                if res_json.get("code") == 200:
+                    return res_json.get("data", {})
+                _LOGGER.error("API responded with error: %s", res_json.get("msg"))
+                return {}
         except Exception as err:
-            _LOGGER.error("拉取户号 %s 数据异常: %s", account, err)
-        return result
+            _LOGGER.error("Error communicating with Jinjiang Water API: %s", err)
+            return {}
+
+    async def get_overview(self, user_kh: str) -> dict:
+        """获取用户概览信息 (findKhSl)."""
+        return await self.async_post("ysBase/findKhSl", {"USERB_KH": user_kh})
+
+    async def get_daily_usage(self, user_kh: str, year_month: str = None) -> dict:
+        """获取每日用水明细 (findEveryDayYsl)."""
+        if not year_month:
+            year_month = datetime.now().strftime("%Y%m")
+        return await self.async_post(
+            "ysBase/findEveryDayYsl",
+            {"USERB_KH": user_kh, "YEAR_MONTH": year_month}
+        )
+
+    async def get_year_bill(self, user_kh: str, year: str = None) -> list:
+        """获取年度账单列表 (findYearDz)."""
+        if not year:
+            year = datetime.now().strftime("%Y")
+        res = await self.async_post(
+            "ysBase/findYearDz",
+            {"USERB_KH": user_kh, "DEBTL_YEAR": year}
+        )
+        return res if isinstance(res, list) else []
