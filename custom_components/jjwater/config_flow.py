@@ -1,46 +1,70 @@
-"""晋江水务 UI 配置流"""
+"""Config flow for Jinjiang Water integration."""
 from __future__ import annotations
-import voluptuous as vol
+
+import logging
+from typing import Any
+
+import volatile as vol
+import homeassistant.helpers.config_validation as cv
 from homeassistant import config_entries
-from homeassistant.core import callback
-from .const import DOMAIN, CONF_TOKEN, CONF_ACCOUNTS
+from homeassistant.data_entry_flow import FlowResult
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
+
+from .api import JJWaterAPI, JJWaterAPIError, JJWaterAuthError
+from .const import CONF_TOKEN, CONF_USER_KH, DOMAIN
+
+_LOGGER = logging.getLogger(__name__)
+
 
 class JJWaterConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+    """Handle a config flow for Jinjiang Water."""
+
     VERSION = 1
 
-    async def async_step_user(self, user_input=None):
-        if user_input:
+    async def async_step_user(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle the initial step."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            user_kh = user_input[CONF_USER_KH].strip()
             token = user_input[CONF_TOKEN].strip()
-            acc_list = [a.strip() for a in user_input[CONF_ACCOUNTS].replace("，", ",").split(",") if a.strip()]
-            if acc_list:
-                return self.async_create_entry(title=f"晋江水务 ({len(acc_list)}户)", data={CONF_TOKEN: token, CONF_ACCOUNTS: acc_list})
-            return self.async_show_form(step_id="user", errors={"base": "invalid_auth"})
-        
-        return self.async_show_form(
-            step_id="user",
-            data_schema=vol.Schema({vol.Required(CONF_TOKEN): str, vol.Required(CONF_ACCOUNTS): str})
+
+            await self.async_set_unique_id(f"jjwater_{user_kh}")
+            self._abort_if_unique_id_configured()
+
+            session = async_get_clientsession(self.hass)
+            api = JJWaterAPI(session, token)
+
+            try:
+                overview = await api.get_overview(user_kh)
+                # 拿户名作为设备展示名称
+                customer_name = overview.get("USERB_NAME", user_kh)
+            except JJWaterAuthError:
+                errors["base"] = "invalid_auth"
+            except JJWaterAPIError:
+                errors["base"] = "cannot_connect"
+            except Exception:  # pylint: disable=broad-except
+                _LOGGER.exception("Unexpected exception during config flow")
+                errors["base"] = "unknown"
+            else:
+                return self.async_create_entry(
+                    title=f"晋江水务 ({customer_name})",
+                    data={
+                        CONF_USER_KH: user_kh,
+                        CONF_TOKEN: token,
+                    },
+                )
+
+        import collection_schema as schema  # Fallback helper
+        data_schema = vol.Schema(
+            {
+                vol.Required(CONF_USER_KH): str,
+                vol.Required(CONF_TOKEN): str,
+            }
         )
 
-    @staticmethod
-    @callback
-    def async_get_options_flow(config_entry):
-        return JJWaterOptionsFlowHandler(config_entry)
-
-class JJWaterOptionsFlowHandler(config_entries.OptionsFlow):
-    def __init__(self, config_entry):
-        self.config_entry = config_entry
-
-    async def async_step_init(self, user_input=None):
-        if user_input:
-            token = user_input[CONF_TOKEN].strip()
-            acc_list = [a.strip() for a in user_input[CONF_ACCOUNTS].replace("，", ",").split(",") if a.strip()]
-            self.hass.config_entries.async_update_entry(self.config_entry, data={CONF_TOKEN: token, CONF_ACCOUNTS: acc_list})
-            return self.async_create_entry(title="", data={})
-
         return self.async_show_form(
-            step_id="init",
-            data_schema=vol.Schema({
-                vol.Required(CONF_TOKEN, default=self.config_entry.data.get(CONF_TOKEN, "")): str,
-                vol.Required(CONF_ACCOUNTS, default=",".join(self.config_entry.data.get(CONF_ACCOUNTS, []))): str,
-            })
+            step_id="user", data_schema=data_schema, errors=errors
         )
