@@ -2,29 +2,21 @@
   "config": {
     "step": {
       "user": {
-        "title": "Jinjiang Water",
-        "description": "Enter Authorization Token and Account IDs (separated by commas).",
+        "title": "配置晋江水务账号",
+        "description": "请输入在小程序中获取到的户号与 Authorization Token",
         "data": {
-          "token": "Authorization Token",
-          "accounts": "Account Numbers"
+          "user_kh": "水表户号 (USERB_KH)",
+          "token": "抓包 Token (Bearer开头)"
         }
       }
     },
     "error": {
-      "cannot_connect": "Failed to connect",
-      "invalid_auth": "Invalid Token",
-      "unknown": "Unknown error"
-    }
-  },
-  "options": {
-    "step": {
-      "init": {
-        "title": "Update Jinjiang Water Config",
-        "data": {
-          "token": "Authorization Token",
-          "accounts": "Account Numbers"
-        }
-      }
+      "cannot_connect": "无法连接至晋江水务服务器",
+      "invalid_auth": "Token 无效或已过期",
+      "unknown": "发生未知的异常错误"
+    },
+    "abort": {
+      "already_configured": "该户号已经添加过，无需重复配置"
     }
   }
 }
