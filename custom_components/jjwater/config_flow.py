@@ -76,6 +76,10 @@ class JJWaterConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 class JJWaterOptionsFlowHandler(config_entries.OptionsFlow):
     """Handle options for Jinjiang Water."""
 
+    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+        """Initialize options flow properly for all HA versions."""
+        self._config_entry = config_entry
+
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
@@ -83,9 +87,11 @@ class JJWaterOptionsFlowHandler(config_entries.OptionsFlow):
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
 
-        # 直接通过 self.config_entry 读取配置（无需在 __init__ 中赋值）
-        current_token = self.config_entry.options.get(
-            CONF_TOKEN, self.config_entry.data.get(CONF_TOKEN, "")
+        # 优先使用属性上的 config_entry（新版HA），退回使用本地私有变量（旧版HA）
+        config_entry = getattr(self, "config_entry", self._config_entry)
+
+        current_token = config_entry.options.get(
+            CONF_TOKEN, config_entry.data.get(CONF_TOKEN, "")
         )
 
         return self.async_show_form(
