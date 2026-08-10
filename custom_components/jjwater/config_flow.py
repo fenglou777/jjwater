@@ -12,7 +12,7 @@ from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import JJWaterAPI, JJWaterAPIError
-from .const import CONF_TOKEN, CONF_USER_KH, DEFAULT_SCAN_INTERVAL_HOURS, DOMAIN
+from .const import CONF_TOKEN, CONF_USER_KH, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -69,16 +69,12 @@ class JJWaterConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     def async_get_options_flow(
         config_entry: config_entries.ConfigEntry,
     ) -> config_entries.OptionsFlow:
-        """注册选项流控制器 (这步会让前端出现齿轮按钮)."""
+        """注册选项流控制器."""
         return JJWaterOptionsFlowHandler(config_entry)
 
 
 class JJWaterOptionsFlowHandler(config_entries.OptionsFlow):
     """Handle options for Jinjiang Water."""
-
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        """Initialize options flow."""
-        self.config_entry = config_entry
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -87,6 +83,7 @@ class JJWaterOptionsFlowHandler(config_entries.OptionsFlow):
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
 
+        # 直接通过 self.config_entry 读取配置（无需在 __init__ 中赋值）
         current_token = self.config_entry.options.get(
             CONF_TOKEN, self.config_entry.data.get(CONF_TOKEN, "")
         )
